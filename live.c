@@ -31,7 +31,7 @@ static FILE *sox;
 static short *frame;
 static size_t frame_size;
 
-int main(int argc, char *argv[])
+int main()
 {
     if (init_main() == 0)
     {
