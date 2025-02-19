@@ -6,30 +6,43 @@
 #include <unistd.h>
 #include <sys/types.h>
 
-static int global_done = 0;
-static void catch_sig(int signum)
-{
-    (void)signum;
-    global_done = 1;
-}
-
 #ifdef WIN32
 #define popen _popen
 #define pclose _pclose
 #endif
 
-static FILE *popen_sox(int sample_rate);
+typedef enum
+{
+    END_RUNNING,
+    NO_SPEECH_FRAMES,
+    SPEECH_IS_NULL,
+    STILL_SPEAKING,
+    ERROR_START_UTTERANCE,
+    ERROR_END_UTTERANCE,
+} UtteranceStatus;
+
+typedef enum
+{
+    RUN_SPEECH_RECOGNITION,
+    END_PROGRAM,
+    WRONG_COMMAND
+} ProgramStatus;
+
 static void clean_up();
 static int init_main();
-int get_speech_frame(const int16 **speech);
-int handle_result_string(const char *result_string);
+static void catch_sig(int signum);
+static ProgramStatus ask_user_command();
+static FILE *popen_sox(int sample_rate);
+static int get_speech_frame(const int16 **speech);
+static int handle_result_string(const char *result_string);
+static UtteranceStatus process_utterance(const char **result_string, _Bool show_partial_result);
 
-static ps_decoder_t *decoder;
-static ps_config_t *config;
-static ps_endpointer_t *endpointer;
-static FILE *sox;
-static short *frame;
-static size_t frame_size;
+static FILE *sox_audio_stream;
+static short *audio_frame_buffer;
+static size_t audio_frame_buffer_size;
+static ps_config_t *speech_config;
+static ps_decoder_t *speech_decoder;
+static ps_endpointer_t *speech_endpointer;
 
 int main()
 {
@@ -38,78 +51,148 @@ int main()
         return 1;
     }
 
-    while (!global_done)
+    const char *result_string = NULL;
+    while (1)
     {
-        const int16 *speech;
-        int prev_in_speech = ps_endpointer_in_speech(endpointer);
-        
-        if (get_speech_frame(&speech) == 0)
+        ProgramStatus status = ask_user_command();
+        if (status == END_PROGRAM)
         {
             break;
         }
-        if (speech == NULL)
+
+        if (status == RUN_SPEECH_RECOGNITION)
+        {
+            while (1)
+            {
+                UtteranceStatus status = process_utterance(&result_string, 1);
+                if (status == NO_SPEECH_FRAMES)
+                {
+                    break;
+                }
+                if (status == ERROR_END_UTTERANCE)
+                {
+                    break;
+                }
+                if (status == ERROR_START_UTTERANCE)
+                {
+                    break;
+                }
+                if (status == STILL_SPEAKING)
+                {
+                    continue;
+                }
+                if (status == SPEECH_IS_NULL)
+                {
+                    continue;
+                }
+
+                if (handle_result_string(result_string) == 1)
+                {
+                    break;
+                }
+            }
+        }
+    }
+
+    return 0;
+}
+
+static UtteranceStatus process_utterance(const char **result_string, _Bool show_partial_result)
+{
+    static _Bool waiting_message_shown = 0;
+    const int16 *speech;
+    int prev_in_speech = ps_endpointer_in_speech(speech_endpointer);
+
+    if (get_speech_frame(&speech) == 0)
+    {
+        printf("⏳ No more speech frames. Exiting...\n");
+        return NO_SPEECH_FRAMES;
+    }
+    if (speech == NULL)
+    {
+        if (!waiting_message_shown)
         {
             printf("⏳ Waiting on your speech...\n");
-            continue;
+            waiting_message_shown = 1;
         }
+        return SPEECH_IS_NULL;
+    }
 
-        if (prev_in_speech == 0)
+    waiting_message_shown = 0;
+
+    if (prev_in_speech == 0)
+    {
+        printf("\n");
+        printf("⏳ Start utterance processing...\n");
+        fprintf(stderr, "⏳ Speech start at %.2f\n", ps_endpointer_speech_start(speech_endpointer));
+        if (ps_start_utt(speech_decoder) == 0)
         {
-            fprintf(stderr, "⏳ Speech start at %.2f\n", ps_endpointer_speech_start(endpointer));
-            printf("✅ Start utterance processing...\n");
-            ps_start_utt(decoder);
+            printf("✅ Successfully started utterance processing.\n");
+            printf("\n");
         }
-
-        int number_of_searched_frames = ps_process_raw(decoder, speech, frame_size, FALSE, FALSE);
-        if (number_of_searched_frames < 0)
+        else
         {
-            E_FATAL("❌ ps_process_raw() failed\n");
+            printf("❌ Failed to start utterance processing.\n");
+            return ERROR_START_UTTERANCE;
         }
+    }
 
-        const char *hypothesis_string = ps_get_hyp(decoder, NULL);
+    int number_of_searched_frames = ps_process_raw(speech_decoder, speech, audio_frame_buffer_size, FALSE, FALSE);
+    if (number_of_searched_frames < 0)
+    {
+        E_FATAL("❌ ps_process_raw() failed\n");
+    }
+
+    const char *hypothesis_string = NULL;
+    if (show_partial_result)
+    {
+        hypothesis_string = ps_get_hyp(speech_decoder, NULL);
         if (hypothesis_string != NULL)
         {
             fprintf(stderr, "✅ Partial result: %s\n", hypothesis_string);
         }
-
-        int current_in_speech = ps_endpointer_in_speech(endpointer);
-        if (current_in_speech != 0)
-        {
-            printf("❌ You are speaking now...\n");
-            continue;
-        }
-
-        fprintf(stderr, "⏳ Speech end at %.2f\n", ps_endpointer_speech_end(endpointer));
-        printf("✅ End utterance processing...\n");
-        ps_end_utt(decoder);
-
-        const char *result_string = ps_get_hyp(decoder, NULL);
-        if (result_string == NULL)
-        {
-            printf("❌ Result string after utterance is NULL.\n");
-            continue;
-        }
-
-        if (strlen(result_string) == 0)
-        {
-            printf("❌ Result string after utterance is empty.\n");
-            continue;
-        }
-
-        printf("✅ Result string: %s\n", result_string);
-
-        if (handle_result_string(result_string) == 0)
-        {
-            continue;
-        }
     }
 
-    clean_up();
-    return 0;
+    int current_in_speech = ps_endpointer_in_speech(speech_endpointer);
+    if (current_in_speech != 0)
+    {
+        // printf("⏳ You are speaking now...\n");
+        return STILL_SPEAKING;
+    }
+
+    printf("\n");
+    fprintf(stderr, "⏳ Speech end at %.2f\n", ps_endpointer_speech_end(speech_endpointer));
+    printf("⏳ End utterance processing...\n");
+    if (ps_end_utt(speech_decoder) == 0)
+    {
+        printf("✅ Successfully finished utterance processing.\n");
+        printf("\n");
+    }
+    else
+    {
+        printf("❌ Failed to finish utterance processing.\n");
+        printf("\n");
+        return ERROR_END_UTTERANCE;
+    }
+
+    (*result_string) = ps_get_hyp(speech_decoder, NULL);
+    return END_RUNNING;
 }
 
-int handle_result_string(const char *result_string)
+static int handle_result_string(const char *result_string)
 {
+    if (result_string == NULL)
+    {
+        printf("❌ Result string after utterance is NULL.\n");
+    }
+
+    if (strlen(result_string) == 0)
+    {
+        printf("❌ Result string after utterance is empty.\n");
+    }
+
+    printf("✅ Result string: %s\n", result_string);
+
     if (strcmp(result_string, "browser") == 0)
     {
         printf("browser command\n");
@@ -127,14 +210,31 @@ int handle_result_string(const char *result_string)
     return 1;
 }
 
-int init_main()
+static int init_main()
 {
     printf("⏳ Initializing main...\n");
-    config = ps_config_init(NULL);
-    ps_default_search_args(config);
-    if ((decoder = ps_init(config)) == NULL)
+    atexit(clean_up);
+
+    speech_config = ps_config_init(NULL);
+    if (speech_config == NULL)
     {
-        E_FATAL("PocketSphinx decoder init failed\n");
+        E_FATAL("❌ PocketSphinx config init failed\n");
+    }
+    else
+    {
+        printf("   ├─ ✅ PocketSphinx config successfully initialized.\n");
+    }
+
+    ps_default_search_args(speech_config);
+
+    speech_decoder = ps_init(speech_config);
+    if (speech_decoder == NULL)
+    {
+        E_FATAL("❌ PocketSphinx decoder init failed\n");
+    }
+    else
+    {
+        printf("   ├─ ✅ PocketSphinx decoder successfully initialized.\n");
     }
 
     double window = 0;
@@ -142,63 +242,106 @@ int init_main()
     ps_vad_mode_t mode = 0;
     int sample_rate = 0;
     double frame_length = 0;
-    endpointer = ps_endpointer_init(window, ratio, mode, sample_rate, frame_length);
-    if (endpointer == NULL)
+
+    speech_endpointer = ps_endpointer_init(window, ratio, mode, sample_rate, frame_length);
+    if (speech_endpointer == NULL)
     {
         E_FATAL("❌ PocketSphinx endpointer init failed\n");
     }
+    else
+    {
+        printf("   ├─ ✅ PocketSphinx endpointer successfully initialized.\n");
+    }
 
-    sox = popen_sox(ps_endpointer_sample_rate(endpointer));
-    frame_size = ps_endpointer_frame_size(endpointer);
+    sox_audio_stream = popen_sox(ps_endpointer_sample_rate(speech_endpointer));
+    audio_frame_buffer_size = ps_endpointer_frame_size(speech_endpointer);
 
-    if ((frame = malloc(frame_size * sizeof(frame[0]))) == NULL)
+    if ((audio_frame_buffer = malloc(audio_frame_buffer_size * sizeof(audio_frame_buffer[0]))) == NULL)
     {
         E_FATAL_SYSTEM("❌ Failed to allocate frame");
+    }
+    else
+    {
+        printf("   ├─ ✅ Successfully allocated frame.\n");
     }
 
     if (signal(SIGINT, catch_sig) == SIG_ERR)
     {
         E_FATAL_SYSTEM("❌ Failed to set SIGINT handler");
     }
-    printf("✅ Initiation done!\n");
+    else
+    {
+        printf("   ├─ ✅ Successfully set SIGINT handler.\n");
+    }
+
+    printf("   └─ ✅ Initiation done!\n");
     printf("\n");
     return 1;
 }
 
-int get_speech_frame(const int16 **speech)
+static int get_speech_frame(const int16 **speech)
 {
-    size_t len, end_samples;
-    if ((len = fread(frame, sizeof(frame[0]), frame_size, sox)) != frame_size)
+    size_t end_samples;
+    // printf("⏳ Reading speech frame...\n");
+
+    size_t len = fread(audio_frame_buffer, sizeof(audio_frame_buffer[0]), audio_frame_buffer_size, sox_audio_stream);
+    // printf("📏 Read %zu samples (expected %zu)\n", len, audio_frame_buffer_size);
+
+    if (len != audio_frame_buffer_size)
     {
         if (len > 0)
         {
-            (*speech) = ps_endpointer_end_stream(endpointer, frame, frame_size, &end_samples);
+            printf("🔚 Stream ending, processing remaining samples...\n");
+            (*speech) = ps_endpointer_end_stream(speech_endpointer, audio_frame_buffer, audio_frame_buffer_size, &end_samples);
+            // printf("✅ Processed %zu end samples\n", end_samples);
         }
         else
         {
+            printf("❌ No more data to read, exiting...\n");
             return 0;
         }
     }
     else
     {
-        (*speech) = ps_endpointer_process(endpointer, frame);
+        // printf("✅ Processing normal speech frame...\n");
+        (*speech) = ps_endpointer_process(speech_endpointer, audio_frame_buffer);
     }
     return 1;
 }
 
-void clean_up()
+static void clean_up()
 {
     printf("\n");
     printf("\n⏳ Cleaning up...\n");
-    free(frame);
-    if (pclose(sox) < 0)
+    if (audio_frame_buffer != NULL)
     {
-        E_ERROR_SYSTEM("❌ Failed to pclose(sox)");
+        free(audio_frame_buffer);
+        printf("   ├─ ✅ Frame cleaned up\n");
     }
-    ps_endpointer_free(endpointer);
-    ps_free(decoder);
-    ps_config_free(config);
-    printf("✅ Successfully cleaned up!\n");
+    if (sox_audio_stream != NULL)
+    {
+        if (pclose(sox_audio_stream) < 0)
+        {
+            E_ERROR_SYSTEM("❌ Failed to pclose(sox)");
+        }
+        printf("   ├─ ✅ Sox cleaned up\n");
+    }
+    if (speech_endpointer != NULL)
+    {
+        ps_endpointer_free(speech_endpointer);
+        printf("   ├─ ✅ Endpointer cleaned up\n");
+    }
+    if (speech_decoder != NULL)
+    {
+        ps_free(speech_decoder);
+        printf("   ├─ ✅ Decoder cleaned up\n");
+    }
+    if (speech_config != NULL)
+    {
+        ps_config_free(speech_config);
+        printf("   ├─ ✅ Config cleaned up\n");
+    }
+    printf("   └─ ✅ Successfully cleaned up!\n");
 }
 
 static FILE *popen_sox(int sample_rate)
@@ -206,23 +349,99 @@ static FILE *popen_sox(int sample_rate)
 #define SOXCMD "sox -q -r %d -c 1 -b 16 -e signed-integer -d -t raw -"
 
     int len = snprintf(NULL, 0, SOXCMD, sample_rate);
+    if (len < 0)
+    {
+        E_FATAL_SYSTEM("❌ snprintf() failed to calculate buffer size");
+    }
+    else
+    {
+        printf("   ├─ ✅ Successfully calculated buffer size: %d\n", len);
+    }
+
     char *soxcmd = malloc(len + 1);
     if (soxcmd == NULL)
     {
         E_FATAL_SYSTEM("❌ Failed to allocate string");
     }
+    else
+    {
+        printf("   ├─ ✅ Successfully allocated sox command string.\n");
+    }
 
     if (snprintf(soxcmd, len + 1, SOXCMD, sample_rate) != len)
     {
-        E_FATAL_SYSTEM("❌ snprintf() failed");
+        E_FATAL_SYSTEM("❌ snprintf() failed: unexpected string length\n");
+    }
+    else
+    {
+        printf("   ├─ ✅ Successfully formatted soz command: %s\n", soxcmd);
     }
 
     FILE *sox = popen(soxcmd, "r");
     if (sox == NULL)
     {
-        E_FATAL_SYSTEM("❌ Failed to popen(%s)", soxcmd);
+        E_FATAL_SYSTEM("❌ Failed to execute sox command: %s", soxcmd);
+    }
+    else
+    {
+        printf("   ├─ ✅ Successfully started soz process with command: %s\n", soxcmd);
     }
 
     free(soxcmd);
     return sox;
+}
+
+static ProgramStatus ask_user_command()
+{
+    ProgramStatus status = WRONG_COMMAND;
+    int command = 1;
+    int result;
+    while (1)
+    {
+        printf("\n");
+        printf("🔚 Select 1 for run recognition and 0 to stop the program: \n");
+        result = scanf("%d", &command);
+
+        if (result != 1)
+        {
+            while (getchar() != '\n')
+            {
+            };
+            printf("❌ Invalid format! Please enter a number.\n");
+        }
+        else if (command != 0 && command != 1)
+        {
+            printf("❌ Invalid command! Please enter 1 or 0\n");
+        }
+        else
+        {
+            break;
+        }
+    }
+
+    switch (command)
+    {
+    case 1:
+    {
+        printf("✅ Perfect! Running speech recognition...\n");
+        status = RUN_SPEECH_RECOGNITION;
+        break;
+    }
+    case 0:
+    {
+        printf("✅ Perfect! Stopping program...\n");
+        status = END_PROGRAM;
+        break;
+    }
+    }
+
+    return status;
+}
+
+static void catch_sig(int signum)
+{
+    (void)signum;
+    printf("\n📶 Perfect! Interrupt signal detected.\n");
+    printf("✅ Stopping program...\n");
+    exit(0);
 }
