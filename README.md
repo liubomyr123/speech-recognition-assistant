@@ -47,6 +47,16 @@ Follow these steps to install and build the project:
 make
 ```
 
+### Build with other languages: RU/DE
+
+```sh
+make MODEL_DE=1
+
+# or
+
+make MODEL_RU=1
+```
+
 ### Run the Program
 
 ```sh
@@ -81,4 +91,55 @@ make clean
 - **Github**: [https://github.com/cmusphinx/pocketsphinx](https://github.com/cmusphinx/pocketsphinx)
 - **Official documentation**: [https://cmusphinx.github.io](https://cmusphinx.github.io)
 - **Documentation for C language**: [https://cmusphinx.github.io/doc/pocketsphinx/index.html](https://cmusphinx.github.io/doc/pocketsphinx/index.html)
+- **Acoustic and Language Models**: [https://sourceforge.net/projects/cmusphinx/files/Acoustic%20and%20Language%20Models/](https://sourceforge.net/projects/cmusphinx/files/Acoustic%20and%20Language%20Models/)
 
+## Language models
+Go to **Acoustic and Language Models** website and download language models:
+   - 'language model'
+      Examples: `cmusphinx-voxforge-de.lm.bin` `ru.lm`
+   - 'dictionary':
+      Examples: `cmusphinx-voxforge-de.dic` `ru.dic`
+   - 'hidden markov model':
+      Examples: `voxforge.cd_ptm_5000` `zero_ru.cd_cont_4000`
+
+Save them in one of the folders: `MODEL_DE`, `MODEL_RU`, `MODEL_UA`...
+
+You can also find these models here: [https://drive.google.com/drive/folders/1UAlBpDFsMTmH69C1u_6yrGoLEp1GN9ov](https://drive.google.com/drive/folders/1UAlBpDFsMTmH69C1u_6yrGoLEp1GN9ov)
+
+Then rename them into `dictionary.dic`, `hmm`, `language_model.lm` or if some of them are binary: `dictionary.dic.bin`, `language_model.lm.bin`.
+
+Then use them inside `load_modals()` function like this:
+
+```c
+#ifdef MODEL_UA
+    printf("\n");
+    printf("✅ MODEL_UA flag is defined.\n");
+    if (check_models_files(&is_run_default_setup, "MODEL_UA") == 1)
+    {
+        printf("Loading...\n");
+    }
+    printf("\n");
+#endif
+
+#ifdef MODEL_DE
+    printf("\n");
+    printf("✅ MODEL_DE flag is defined.\n");
+    if (check_models_files(&is_run_default_setup, "MODEL_DE") == 1)
+    {
+        printf("Loading...\n");
+    }
+    printf("\n");
+#endif
+```
+
+Here instead of `Loading...`:
+```c
+  printf("Loading...\n");
+```
+
+Load real models:
+```c
+  ps_config_set_str(speech_config, "hmm", "MODEL_DE/hmm");
+  ps_config_set_str(speech_config, "lm", "MODEL_DE/language_model.lm.bin");
+  ps_config_set_str(speech_config, "dict", "MODEL_DE/dictionary.dic");
+```
