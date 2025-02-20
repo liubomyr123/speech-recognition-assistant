@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include <dirent.h>
+#include <sys/stat.h>
 
 #ifdef WIN32
 #define popen _popen
@@ -210,6 +212,205 @@ static int handle_result_string(const char *result_string)
     return 1;
 }
 
+int check_if_directory_is_empty(const char *folder)
+{
+    DIR *dir_stream = opendir(folder);
+    if (dir_stream == NULL)
+    {
+        perror("❌ Cannot open reading dir stream.\n");
+        return -1;
+    }
+    int is_empty_flag = 1;
+    struct dirent *entry = readdir(dir_stream);
+    while (entry != NULL)
+    {
+        if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0)
+        {
+            is_empty_flag = 0;
+            break;
+        }
+        entry = readdir(dir_stream);
+    }
+
+    if (closedir(dir_stream) != 0)
+    {
+        perror("❌ Cannot close reading dir stream.\n");
+        return -1;
+    }
+    return is_empty_flag;
+}
+
+int check_if_file_exist(char *name, char *folder)
+{
+    DIR *dir_stream = opendir(folder);
+    if (dir_stream == NULL)
+    {
+        perror("❌ Cannot open reading dir stream.\n");
+        return -1;
+    }
+    int is_found_flag = 0;
+    struct dirent *dp = readdir(dir_stream);
+    while (dp != NULL)
+    {
+        if (strncmp(dp->d_name, name, strlen(name)) == 0)
+        {
+            is_found_flag = 1; // OK
+            break;
+        }
+        dp = readdir(dir_stream);
+    }
+    if (closedir(dir_stream) != 0)
+    {
+        perror("❌ Cannot close reading dir stream.\n");
+        return -1;
+    }
+    return is_found_flag;
+}
+
+int check_if_directory_exists_parent(char *parent_dir, char *name)
+{
+    char full_path[1024];
+    snprintf(full_path, sizeof(full_path), "%s/%s", parent_dir, name);
+
+    struct stat path_stat;
+    if (stat(full_path, &path_stat) != 0)
+    {
+        return -1;
+    }
+
+    if (S_ISDIR(path_stat.st_mode))
+    {
+        return 1; // OK
+    }
+    else
+    {
+        return 0;
+    }
+}
+
+int check_models_files(int *is_run_default_setup, char *model_name)
+{
+    int result = 1;
+    if (strcmp(model_name, "MODEL_UA") != 0 &&
+        strcmp(model_name, "MODEL_DE") != 0 &&
+        strcmp(model_name, "MODEL_RU") != 0)
+    {
+        result = 0;
+        return result;
+    }
+
+    char full_path[1024];
+    snprintf(full_path, sizeof(full_path), "./%s", model_name);
+
+    if (check_if_directory_exists_parent("./", model_name) != 1)
+    {
+        printf("❌ %s folder was not found.\n", model_name);
+        *is_run_default_setup = 1;
+        result = 0;
+    }
+    else
+    {
+        *is_run_default_setup = 0;
+        if (check_if_directory_is_empty(full_path) == 1)
+        {
+            printf("❌ %s: Folder is empty.\n", model_name);
+            *is_run_default_setup = 1;
+            result = 0;
+            return result;
+        }
+
+        if (check_if_directory_exists_parent(full_path, "hmm") != 1)
+        {
+            printf("❌ %s: ./hmm folder was not found.\n", model_name);
+            *is_run_default_setup = 1;
+            result = 0;
+        }
+        else
+        {
+            char hmm_full_path[1024];
+            snprintf(hmm_full_path, sizeof(hmm_full_path), "./%s/hmm", model_name);
+
+            if (check_if_directory_is_empty(hmm_full_path) == 1)
+            {
+                printf("❌ %s: ./hmm folder is empty.\n", model_name);
+                *is_run_default_setup = 1;
+                result = 0;
+            }
+        }
+        if (check_if_file_exist("dictionary.dic", full_path) != 1 && check_if_file_exist("dictionary.dic.bin", full_path) != 1)
+        {
+            printf("❌ %s: Dictionary file was not found.\n", model_name);
+            *is_run_default_setup = 1;
+            result = 0;
+        }
+
+        if (check_if_file_exist("language_model.lm", full_path) != 1 && check_if_file_exist("language_model.lm.bin", full_path) != 1)
+        {
+            printf("❌ %s: Language model file was not found.\n", model_name);
+            *is_run_default_setup = 1;
+            result = 0;
+        }
+
+        if (*is_run_default_setup == 1)
+        {
+            printf("❌ %s: Skipping...\n", model_name);
+            result = 0;
+        }
+        else
+        {
+            printf("⏳ Running %s...\n", model_name);
+            result = 1;
+        }
+    }
+    return result;
+}
+
+static void load_modals()
+{
+    if (speech_config == NULL)
+    {
+        return;
+    }
+
+    int is_run_default_setup = 1;
+
+#ifdef MODEL_UA
+    printf("\n");
+    printf("✅ MODEL_UA flag is defined.\n");
+    if (check_models_files(&is_run_default_setup, "MODEL_UA") == 1)
+    {
+        printf("Loading...\n");
+    }
+    printf("\n");
+#endif
+
+#ifdef MODEL_DE
+    printf("\n");
+    printf("✅ MODEL_DE flag is defined.\n");
+    if (check_models_files(&is_run_default_setup, "MODEL_DE") == 1)
+    {
+        printf("Loading...\n");
+    }
+    printf("\n");
+#endif
+
+#ifdef MODEL_RU
+    printf("\n");
+    printf("✅ MODEL_RU flag is defined.\n");
+    if (check_models_files(&is_run_default_setup, "MODEL_RU") == 1)
+    {
+        printf("Loading...\n");
+    }
+    printf("\n");
+#endif
+
+    if (is_run_default_setup == 1)
+    {
+        printf("   ├─ ⏳ Running default acoustic and language models...\n");
+        ps_default_search_args(speech_config);
+    }
+}
+
 static int init_main()
 {
     printf("⏳ Initializing main...\n");
@@ -225,7 +426,7 @@ static int init_main()
         printf("   ├─ ✅ PocketSphinx config successfully initialized.\n");
     }
 
-    ps_default_search_args(speech_config);
+    load_modals();
 
     speech_decoder = ps_init(speech_config);
     if (speech_decoder == NULL)
