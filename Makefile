@@ -19,8 +19,20 @@ SRCS = live.c
 # Object files
 OBJS = $(SRCS:.c=.o)
 
+ifeq ($(MODEL_RU), 1)
+    CFLAGS += -DMODEL_RU
+endif
+
+ifeq ($(MODEL_UA), 1)
+    CFLAGS += -DMODEL_UA
+endif
+
+ifeq ($(MODEL_DE), 1)
+    CFLAGS += -DMODEL_DE
+endif
+
 # Rule to build the executable
-$(TARGET): $(OBJS)
+$(TARGET): clean $(OBJS)
 	$(CC) $(CFLAGS) -o $(TARGET) $(OBJS) $(LDFLAGS)
 
 # Rule to compile source files into object files
