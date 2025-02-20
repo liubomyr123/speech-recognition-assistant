@@ -44,6 +44,7 @@ int check_if_directory_exists_parent(char *parent_dir, char *name);
 int check_models_files(int *is_run_default_setup, char *model_name);
 static void load_modals();
 
+
 static FILE *sox_audio_stream;
 static short *audio_frame_buffer;
 static size_t audio_frame_buffer_size;
