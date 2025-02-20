@@ -38,6 +38,11 @@ static FILE *popen_sox(int sample_rate);
 static int get_speech_frame(const int16 **speech);
 static int handle_result_string(const char *result_string);
 static UtteranceStatus process_utterance(const char **result_string, _Bool show_partial_result);
+int check_if_directory_is_empty(const char *folder);
+int check_if_file_exist(char *name, char *folder);
+int check_if_directory_exists_parent(char *parent_dir, char *name);
+int check_models_files(int *is_run_default_setup, char *model_name);
+static void load_modals();
 
 static FILE *sox_audio_stream;
 static short *audio_frame_buffer;
