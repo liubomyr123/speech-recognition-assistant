@@ -1,0 +1,74 @@
+1) Скачати файл .arpa - мовна модель
+    https://github.com/MontrealCorpusTools/mfa-models/releases/tag/language_model-ukrainian_mfa_lm-v2.0.0a
+
+2) Конвертувати його в .lm 
+    sphinx_lm_convert -i ukrainian_mfa_lm.arpa -o ukrainian_mfa_lm.lm -ofmt bin
+
+    або просто змінити розширення з .arpa в .lm
+
+3) Скачати словник
+    https://github.com/MontrealCorpusTools/mfa-models/releases/tag/dictionary-ukrainian_mfa-v3.0.0
+
+4) Акустичні семпли
+    https://huggingface.co/datasets/Yehor/opentts-uk/tree/main/data
+
+5) Транскрипція для семплів
+    https://huggingface.co/datasets/Yehor/opentts-uk/tree/main/voices
+
+Вона кодована, ось приклад що маємо отримати 
+
+```
+import json
+
+# Ваша вихідна структура даних
+input_data = [
+    {"audio": "53267.ogg", "text": "\u041e\u0442\u043e\u0436 \u044f \u0437\u043d\u0430\u044e, \u0449\u043e \u0440\u043e\u0431\u043b\u044e, \u0442\u043e\u0439 \u0445\u043e\u0434\u0456\u043c.", "text_stressed": "\u041e\u0442\u043e\u0301\u0436 \u044f \u0437\u043d\u0430\u0301\u044e, \u0449\u043e \u0440\u043e\u0431\u043b\u044e\u0301, \u0442\u043e\u0439 \u0445\u043e\u0434\u0456\u0301\u043c.", "duration": 5.1},
+    {"audio": "53268.ogg", "text": "\u2014 \u0410 \u043c\u043e\u0436\u0435 \u0434\u043e \u044f\u043a\u043e\u0433\u043e \u0490\u0430\u0301\u0437\u0434\u0438?", "text_stressed": "\u2014 \u0410 \u043c\u043e\u0301\u0436\u0435 \u0434\u043e \u044f\u043a\u043e\u0301\u0433\u043e \u0490\u0430\u0301\u0437\u0434\u0438?", "duration": 3.2}
+]
+
+# Виведемо сирий текст, щоб перевірити що відбувається
+for item in input_data:
+    print(f"Audio file: {item['audio']}")
+    print(f"Raw text: {item['text']}")
+```
+
+6) Далі треба створити файл транскрипцію
+
+    59451.ogg    "це приклад аудіофайлу"
+    59452.ogg    "інший приклад"
+
+7) Структура з файлами
+
+    /train_data/
+        -> /audio/  # всі ваші аудіофайли (.wav)
+        -> /transcriptions/  # всі транскрипції (файл з усіма аудіофайлами та їх текстами)
+
+8) Генерація акустичних фіч
+Для кожного аудіофайлу потрібно згенерувати акустичні фічі (наприклад, MFCC). Ви можете використати інструмент sphinx_fe. Приклад для одного файлу:
+
+    sphinx_fe -argfile <path_to_model>/model_parameters -samprate 16000 -c configfile -i 53267.ogg -o mfcc/53267.mfc
+Це дозволить створити фічі з вашого аудіо.
+
+9) створити словник з усіма словами
+
+10) Тренування акустичної моделі
+    sphinxtrain -argfile <path_to_model>/train_args -t training_data_dir -h hmm_model_dir -w dictionary_file
+
+
+
+Отже для створення акустичної моделі
+- Підготовка аудіофайлів та транскрипцій.
+- Створення словника.
+- Генерація акустичних фіч.
+- Тренування акустичної моделі.
+- Тестування моделі.
+
+
+
+
+
+
+
+
+
+
