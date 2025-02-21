@@ -44,7 +44,6 @@ int check_if_directory_exists_parent(char *parent_dir, char *name);
 int check_models_files(int *is_run_default_setup, char *model_name);
 static void load_modals();
 
-
 static FILE *sox_audio_stream;
 static short *audio_frame_buffer;
 static size_t audio_frame_buffer_size;
@@ -386,6 +385,9 @@ static void load_modals()
     if (check_models_files(&is_run_default_setup, "MODEL_UA") == 1)
     {
         printf("Loading...\n");
+        // ps_config_set_str(speech_config, "hmm", "MODEL_UA/hmm");
+        // ps_config_set_str(speech_config, "lm", "MODEL_UA/language_model.lm");
+        // ps_config_set_str(speech_config, "dict", "MODEL_UA/dictionary.dic");
     }
     printf("\n");
 #endif
@@ -396,6 +398,9 @@ static void load_modals()
     if (check_models_files(&is_run_default_setup, "MODEL_DE") == 1)
     {
         printf("Loading...\n");
+        // ps_config_set_str(speech_config, "hmm", "MODEL_DE/hmm");
+        // ps_config_set_str(speech_config, "lm", "MODEL_DE/language_model.lm");
+        // ps_config_set_str(speech_config, "dict", "MODEL_DE/dictionary.dic");
     }
     printf("\n");
 #endif
@@ -406,6 +411,9 @@ static void load_modals()
     if (check_models_files(&is_run_default_setup, "MODEL_RU") == 1)
     {
         printf("Loading...\n");
+        // ps_config_set_str(speech_config, "hmm", "MODEL_RU/hmm");
+        // ps_config_set_str(speech_config, "lm", "MODEL_RU/language_model.lm");
+        // ps_config_set_str(speech_config, "dict", "MODEL_RU/dictionary.dic");
     }
     printf("\n");
 #endif
