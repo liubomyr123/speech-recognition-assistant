@@ -19,6 +19,10 @@ SRCS = live.c
 # Object files
 OBJS = $(SRCS:.c=.o)
 
+ifeq ($(an4), 1)
+    CFLAGS += -Dan4
+endif
+
 ifeq ($(MODEL_RU), 1)
     CFLAGS += -DMODEL_RU
 endif

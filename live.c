@@ -298,6 +298,7 @@ int check_models_files(int *is_run_default_setup, char *model_name)
     int result = 1;
     if (strcmp(model_name, "MODEL_UA") != 0 &&
         strcmp(model_name, "MODEL_DE") != 0 &&
+        strcmp(model_name, "an4") != 0 &&
         strcmp(model_name, "MODEL_RU") != 0)
     {
         result = 0;
@@ -378,6 +379,19 @@ static void load_modals()
     }
 
     int is_run_default_setup = 1;
+
+#ifdef an4
+    printf("\n");
+    printf("✅ an4 flag is defined.\n");
+    if (check_models_files(&is_run_default_setup, "an4") == 1)
+    {
+        printf("Loading...\n");
+        ps_config_set_str(speech_config, "hmm", "an4/hmm");
+        ps_config_set_str(speech_config, "lm", "an4/language_model.lm");
+        ps_config_set_str(speech_config, "dict", "an4/dictionary.dic");
+    }
+    printf("\n");
+#endif
 
 #ifdef MODEL_UA
     printf("\n");

@@ -49,6 +49,11 @@ for item in input_data:
     sphinx_fe -argfile <path_to_model>/model_parameters -samprate 16000 -c configfile -i 53267.ogg -o mfcc/53267.mfc
 Це дозволить створити фічі з вашого аудіо.
 
+
+Example:
+    sphinx_fe -samprate 16000 -i audio/25143.wav -o features/25143.mfc
+
+
 9) створити словник з усіма словами
 
 10) Тренування акустичної моделі
@@ -67,8 +72,287 @@ for item in input_data:
 
 
 
+https://cmusphinx.github.io/wiki/tutorialam/
+
+1) 
+    mkdir tutorial
+    cd tutorial
+
+2)
+    git clone --depth 1 https://github.com/cmusphinx/an4.git
+    git clone --depth 1 https://github.com/cmusphinx/sphinxtrain.git
+    git clone --depth 1 https://github.com/cmusphinx/pocketsphinx.git
+
+Result:
+```
+liubomyr@liubomyr-sliusar ~/Desktop> mkdir tutorial
+liubomyr@liubomyr-sliusar ~/Desktop> cd tutorial
+liubomyr@liubomyr-sliusar ~/D/tutorial> git clone --depth 1 https://github.com/cmusphinx/an4.git
+Cloning into 'an4'...
+remote: Enumerating objects: 1182, done.
+remote: Counting objects: 100% (1182/1182), done.
+remote: Compressing objects: 100% (1182/1182), done.
+remote: Total 1182 (delta 0), reused 1181 (delta 0), pack-reused 0 (from 0)
+Receiving objects: 100% (1182/1182), 60.50 MiB | 1009.00 KiB/s, done.
+liubomyr@liubomyr-sliusar ~/D/tutorial> git clone --depth 1 https://github.com/cmusphinx/sphinxtrain.git
+Cloning into 'sphinxtrain'...
+remote: Enumerating objects: 1733, done.
+remote: Counting objects: 100% (1733/1733), done.
+remote: Compressing objects: 100% (1304/1304), done.
+remote: Total 1733 (delta 349), reused 1379 (delta 215), pack-reused 0 (from 0)
+Receiving objects: 100% (1733/1733), 9.10 MiB | 1.03 MiB/s, done.
+Resolving deltas: 100% (349/349), done.
+liubomyr@liubomyr-sliusar ~/D/tutorial> git clone --depth 1 https://github.com/cmusphinx/pocketsphinx.git
+Cloning into 'pocketsphinx'...
+remote: Enumerating objects: 678, done.
+remote: Counting objects: 100% (678/678), done.
+remote: Compressing objects: 100% (621/621), done.
+remote: Total 678 (delta 95), reused 268 (delta 28), pack-reused 0 (from 0)
+Receiving objects: 100% (678/678), 32.44 MiB | 975.00 KiB/s, done.
+Resolving deltas: 100% (95/95), done.
+liubomyr@liubomyr-sliusar ~/D/tutorial> 
+```
+
+3)
+    cmake -S sphinxtrain -B sphinxtrain/build
+    cmake --build sphinxtrain/build
+    cmake -S pocketsphinx -B pocketsphinx/build
+    cmake --build pocketsphinx/build
+    cp pocketsphinx/build/pocketsphinx_batch sphinxtrain/build
+
+Result:
+
+    /an4/
+        /etc/
+            /an4.dic
+            /an4.filler
+            ...
+        /wav/
+        LICENSE
+        README.md
+    /pocketsphinx/
+    /sphinxtrain/
+
+4) 
+    liubomyr@liubomyr-sliusar ~/D/tutorial> cd ./an4/
+    liubomyr@liubomyr-sliusar ~/D/t/an4 (main)> pwd
+    /home/liubomyr/Desktop/tutorial/an4
+
+5)
+    python ../sphinxtrain/scripts/sphinxtrain -t an4 setup
+
+Result:
+    liubomyr@liubomyr-sliusar ~/D/t/an4 (main)> python ../sphinxtrain/scripts/sphinxtrain -t an4 setup
+
+    Sphinxtrain path: /home/liubomyr/Desktop/tutorial/sphinxtrain
+    Sphinxtrain binaries path: /home/liubomyr/Desktop/tutorial/sphinxtrain/build
+    Setting up the database an4
+
+In this example inside the `sphinx_train.cfg` file:
+    ...
+    # Directory containing SphinxTrain binaries
+    $CFG_BASE_DIR = "/home/liubomyr/Desktop/tutorial/an4";      <- dir where we have our database
+    ...
+   
+    ...
+    # Variables used in main training of models
+    $CFG_DICTIONARY     = "$CFG_LIST_DIR/$CFG_DB_NAME.dic";
+    $CFG_RAWPHONEFILE   = "$CFG_LIST_DIR/$CFG_DB_NAME.phone";
+    $CFG_FILLERDICT     = "$CFG_LIST_DIR/$CFG_DB_NAME.filler";
+    $CFG_LISTOFFILES    = "$CFG_LIST_DIR/${CFG_DB_NAME}_train.fileids";
+    $CFG_TRANSCRIPTFILE = "$CFG_LIST_DIR/${CFG_DB_NAME}_train.transcription";
+    $CFG_FEATPARAMS     = "$CFG_LIST_DIR/feat.params";
+    ...
+6)
+    python ../sphinxtrain/scripts/sphinxtrain run
+
+Result:
+    liubomyr@liubomyr-sliusar ~/D/t/an4 (main) [2]> python ../sphinxtrain/scripts/sphinxtrain run
+
+    Sphinxtrain path: /home/liubomyr/Desktop/tutorial/sphinxtrain
+    Sphinxtrain binaries path: /home/liubomyr/Desktop/tutorial/sphinxtrain/build
+    Running the training
+    MODULE: 000 Computing feature from audio files
+    Extracting features from  segments starting at  (part 1 of 1) 
+    Extracting features from  segments starting at  (part 1 of 1) 
+    Feature extraction is done
+    MODULE: 00 verify training files
+    Phase 1: Checking to see if the dict and filler dict agrees with the phonelist file.
+        Found 133 words using 34 phones
+    Phase 2: Checking to make sure there are not duplicate entries in the dictionary
+    Phase 3: Check general format for the fileids file; utterance length (must be positive); files exist
+    Phase 4: Checking number of lines in the transcript file should match lines in fileids file
+    Phase 5: Determine amount of training data, see if n_tied_states seems reasonable.
+        Estimated Total Hours Training: 0.704672222222222
+        This is a small amount of data, no comment at this time
+    Phase 6: Checking that all the words in the transcript are in the dictionary
+        Words in dictionary: 130
+        Words in filler dictionary: 3
+    Phase 7: Checking that all the phones in the transcript are in the phonelist, and all phones in the phonelist appear at least once
+    ...
+
+After we trained model, we can use it:
+
+1) Go to 
+    /home/liubomyr/Desktop/tutorial/an4
+2) Open /etc/
+3) Use an4.dic and an4.lm
+4) Go back to 
+    /home/liubomyr/Desktop/tutorial/an4
+5) Open /model_parameters/
+6) Find folder with name for example `an4.cd_cont_200` and with next files:
+    mdef
+    feat.params
+    mixture_weights
+    means
+    noisedict
+    transition_matrices
+    variances
+
+7) Rename them:
+    an4.dic -> dictionary.dic           <- this is a file
+    an4.lm -> language_model.dic        <- this is a file
+    cd_cont_200 -> hmm                  <- this is a directory
+
+8) And use them like this inside the program:
+        ps_config_set_str(speech_config, "hmm", "hmm");
+        ps_config_set_str(speech_config, "lm", "language_model.lm");
+        ps_config_set_str(speech_config, "dict", "dictionary.dic");
 
 
+9) This model can recognize only these words:
+A                    AH
+A(2)                 EY
+AND                  AE N D
+AND(2)               AH N D
+APOSTROPHE           AH P AA S T R AH F IY
+APRIL                EY P R AH L
+AREA                 EH R IY AH
+AUGUST               AA G AH S T
+AUGUST(2)            AO G AH S T
+B                    B IY
+C                    S IY
+CODE                 K OW D
+D                    D IY
+DECEMBER             D IH S EH M B ER
+E                    IY
+EIGHT                EY T
+EIGHTEEN             EY T IY N
+EIGHTEENTH           EY T IY N TH
+EIGHTH               EY T TH
+EIGHTH(2)            EY TH
+EIGHTY               EY T IY
+ELEVEN               IH L EH V AH N
+ELEVEN(2)            IY L EH V AH N
+ELEVENTH             IH L EH V AH N TH
+ELEVENTH(2)          IY L EH V AH N TH
+ENTER                EH N ER
+ENTER(2)             EH N T ER
+ERASE                IH R EY S
+ERASE(2)             IY R EY S
+F                    EH F
+FEBRUARY             F EH B AH W EH R IY
+FEBRUARY(2)          F EH B R UW W EH R IY
+FEBRUARY(3)          F EH B UW W EH R IY
+FEBRUARY(4)          F EH B Y AH W EH R IY
+FEBRUARY(5)          F EH B Y UW W EH R IY
+FIFTEEN              F IH F T IY N
+FIFTEENTH            F IH F T IY N TH
+FIFTH                F IH F TH
+FIFTH(2)             F IH TH
+FIFTY                F IH F T IY
+FIRST                F ER S T
+FIVE                 F AY V
+FORTY                F AO R T IY
+FOUR                 F AO R
+FOURTEEN             F AO R T IY N
+FOURTH               F AO R TH
+G                    JH IY
+GO                   G OW
+H                    EY CH
+HALF                 HH AE F
+HELP                 HH EH L P
+HUNDRED              HH AH N D ER D
+HUNDRED(2)           HH AH N D R AH D
+HUNDRED(3)           HH AH N D R IH D
+HUNDRED(4)           HH AH N ER D
+I                    AY
+J                    JH EY
+JANUARY              JH AE N Y UW EH R IY
+JULY                 JH AH L AY
+JULY(2)              JH UW L AY
+JUNE                 JH UW N
+K                    K EY
+L                    EH L
+M                    EH M
+MARCH                M AA R CH
+MAY                  M EY
+N                    EH N
+NINE                 N AY N
+NINETEEN             N AY N T IY N
+NINETY               N AY N T IY
+NINTH                N AY N TH
+NO                   N OW
+NOVEMBER             N OW V EH M B ER
+O                    OW
+OCTOBER              AA K T OW B ER
+OF                   AH V
+OH                   OW
+ONE                  HH W AH N
+ONE(2)               W AH N
+P                    P IY
+Q                    K Y UW
+R                    AA R
+REPEAT               R IH P IY T
+REPEAT(2)            R IY P IY T
+RUBOUT               R AH B AW T
+S                    EH S
+SECOND               S EH K AH N
+SECOND(2)            S EH K AH N D
+SEPTEMBER            S EH P T EH M B ER
+SEVEN                S EH V AH N
+SEVENTEEN            S EH V AH N T IY N
+SEVENTH              S EH V AH N TH
+SEVENTY              S EH V AH N IY
+SEVENTY(2)           S EH V AH N T IY
+SIX                  S IH K S
+SIXTEEN              S IH K S T IY N
+SIXTEENTH            S IH K S T IY N TH
+SIXTH                S IH K S TH
+SIXTY                S IH K S T IY
+START                S T AA R T
+STOP                 S T AA P
+T                    T IY
+TEN                  T EH N
+THIRD                TH ER D
+THIRTEEN             TH ER T IY N
+THIRTIETH            TH ER T IY AH TH
+THIRTIETH(2)         TH ER T IY IH TH
+THIRTY               TH ER D IY
+THIRTY(2)            TH ER T IY
+THOUSAND             TH AW Z AH N
+THOUSAND(2)          TH AW Z AH N D
+THREE                TH R IY
+TWELFTH              T W EH L F TH
+TWELVE               T W EH L V
+TWENTIETH            T W EH N IY AH TH
+TWENTIETH(2)         T W EH N IY IH TH
+TWENTIETH(3)         T W EH N T IY AH TH
+TWENTIETH(4)         T W EH N T IY IH TH
+TWENTY               T W EH N IY
+TWENTY(2)            T W EH N T IY
+TWO                  T UW
+U                    Y UW
+V                    V IY
+W                    D AH B AH L Y UW
+X                    EH K S
+Y                    W AY
+YES                  Y EH S
+Z                    Z IY
+ZERO                 Z IH R OW
+ZERO(2)              Z IY R OW
 
 
+We can find them inside the an4.dic file.
 
+And now bassed on this tutorial we can train our own model.
