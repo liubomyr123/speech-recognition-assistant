@@ -43,6 +43,8 @@ int check_if_file_exist(char *name, char *folder);
 int check_if_directory_exists_parent(char *parent_dir, char *name);
 int check_models_files(int *is_run_default_setup, char *model_name);
 static void load_modals();
+static void init_sox();
+static void clear_sox();
 
 static FILE *sox_audio_stream;
 static short *audio_frame_buffer;
@@ -69,6 +71,7 @@ int main()
 
         if (status == RUN_SPEECH_RECOGNITION)
         {
+            init_sox();
             while (1)
             {
                 UtteranceStatus status = process_utterance(&result_string, 1);
@@ -78,10 +81,12 @@ int main()
                 }
                 if (status == ERROR_END_UTTERANCE)
                 {
+                    clear_sox(); 
                     break;
                 }
                 if (status == ERROR_START_UTTERANCE)
                 {
+                    clear_sox(); 
                     break;
                 }
                 if (status == STILL_SPEAKING)
@@ -98,6 +103,7 @@ int main()
                     break;
                 }
             }
+            clear_sox();
         }
     }
 
@@ -466,34 +472,6 @@ static int init_main()
         printf("   ├─ ✅ PocketSphinx decoder successfully initialized.\n");
     }
 
-    double window = 0;
-    double ratio = 0.0;
-    ps_vad_mode_t mode = 0;
-    int sample_rate = 0;
-    double frame_length = 0;
-
-    speech_endpointer = ps_endpointer_init(window, ratio, mode, sample_rate, frame_length);
-    if (speech_endpointer == NULL)
-    {
-        E_FATAL("❌ PocketSphinx endpointer init failed\n");
-    }
-    else
-    {
-        printf("   ├─ ✅ PocketSphinx endpointer successfully initialized.\n");
-    }
-
-    sox_audio_stream = popen_sox(ps_endpointer_sample_rate(speech_endpointer));
-    audio_frame_buffer_size = ps_endpointer_frame_size(speech_endpointer);
-
-    if ((audio_frame_buffer = malloc(audio_frame_buffer_size * sizeof(audio_frame_buffer[0]))) == NULL)
-    {
-        E_FATAL_SYSTEM("❌ Failed to allocate frame");
-    }
-    else
-    {
-        printf("   ├─ ✅ Successfully allocated frame.\n");
-    }
-
     if (signal(SIGINT, catch_sig) == SIG_ERR)
     {
         E_FATAL_SYSTEM("❌ Failed to set SIGINT handler");
@@ -546,6 +524,7 @@ static void clean_up()
     {
         free(audio_frame_buffer);
         printf("   ├─ ✅ Frame cleaned up\n");
+        audio_frame_buffer = NULL;
     }
     if (sox_audio_stream != NULL)
     {
@@ -554,21 +533,25 @@ static void clean_up()
             E_ERROR_SYSTEM("❌ Failed to pclose(sox)");
         }
         printf("   ├─ ✅ Sox cleaned up\n");
+        sox_audio_stream = NULL;
     }
     if (speech_endpointer != NULL)
     {
         ps_endpointer_free(speech_endpointer);
         printf("   ├─ ✅ Endpointer cleaned up\n");
+        speech_endpointer = NULL;
     }
     if (speech_decoder != NULL)
     {
         ps_free(speech_decoder);
         printf("   ├─ ✅ Decoder cleaned up\n");
+        speech_decoder = NULL;
     }
     if (speech_config != NULL)
     {
         ps_config_free(speech_config);
         printf("   ├─ ✅ Config cleaned up\n");
+        speech_config = NULL;
     }
     printf("   └─ ✅ Successfully cleaned up!\n");
 }
@@ -673,4 +656,67 @@ static void catch_sig(int signum)
     printf("\n📶 Perfect! Interrupt signal detected.\n");
     printf("✅ Stopping program...\n");
     exit(0);
+}
+
+static void init_sox()
+{
+    double window = 0;
+    double ratio = 0.0;
+    ps_vad_mode_t mode = 0;
+    int sample_rate = 0;
+    double frame_length = 0;
+
+    speech_endpointer = ps_endpointer_init(window, ratio, mode, sample_rate, frame_length);
+    if (speech_endpointer == NULL)
+    {
+        E_FATAL("❌ PocketSphinx endpointer init failed\n");
+    }
+    else
+    {
+        printf("   ├─ ✅ PocketSphinx endpointer successfully initialized.\n");
+    }
+
+    sox_audio_stream = popen_sox(ps_endpointer_sample_rate(speech_endpointer));
+    audio_frame_buffer_size = ps_endpointer_frame_size(speech_endpointer);
+
+    if ((audio_frame_buffer = malloc(audio_frame_buffer_size * sizeof(audio_frame_buffer[0]))) == NULL)
+    {
+        E_FATAL_SYSTEM("❌ Failed to allocate frame");
+    }
+    else
+    {
+        printf("   ├─ ✅ Successfully allocated frame.\n");
+    }
+    printf("   └─ ✅ Initiation done!\n");
+    printf("\n");
+}
+
+static void clear_sox()
+{
+    printf("\n⏳ Cleaning up sox...\n");
+    if (speech_endpointer != NULL)
+    {
+        ps_endpointer_free(speech_endpointer);
+        printf("   ├─ ✅ Endpointer cleaned up\n");
+        speech_endpointer = NULL;
+    }
+
+    if (sox_audio_stream != NULL)
+    {
+        if (pclose(sox_audio_stream) < 0)
+        {
+            E_ERROR_SYSTEM("❌ Failed to pclose(sox)");
+        }
+        printf("   ├─ ✅ Sox cleaned up\n");
+        sox_audio_stream = NULL;
+    }
+
+    if (audio_frame_buffer != NULL)
+    {
+        free(audio_frame_buffer);
+        printf("   ├─ ✅ Frame cleaned up\n");
+        audio_frame_buffer = NULL;
+    }
+    printf("   └─ ✅ Successfully cleaned up!\n");
+    printf("\n");
 }
